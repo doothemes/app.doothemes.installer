@@ -44,3 +44,13 @@ GITHUB_TOKEN=""
 DB_NAME="doothemes"
 DB_USER="doothemes"
 DB_PASS=""
+
+# --- Add-on phpMyAdmin (tools/phpmyadmin.sh) -------------------------------
+# Solo aplica si corres el add-on opcional `sudo ./tools/phpmyadmin.sh`.
+# Ruta "secreta" (subpath) donde se sirve phpMyAdmin en el dominio principal:
+#   https://<DOMAIN>/<PMA_PATH>          (sin barra inicial)
+# Cámbiala por algo no adivinable; es tu capa de ocultamiento (además del login).
+PMA_PATH="mirutadatabase"
+
+# Usuario admin de MariaDB que el script crea para entrar a phpMyAdmin.
+PMA_DB_USER="dbadmin"
