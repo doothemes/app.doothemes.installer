@@ -213,8 +213,13 @@ ${SITE_ADDR} {
 		max_size 64MB
 	}
 }
+
+# Add-ons (phpMyAdmin u otros): cada uno en /etc/caddy/conf.d/*.caddy, así
+# sobreviven a las re-ejecuciones del instalador.
+import /etc/caddy/conf.d/*.caddy
 CADDY
 } > "$CADDYFILE"
+mkdir -p /etc/caddy/conf.d
 # Nota: Caddy loguea a journald (stdout del servicio) → `journalctl -u caddy`.
 # Se evita un `log { output file … }` para no chocar con permisos del archivo.
 
