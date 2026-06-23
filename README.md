@@ -167,7 +167,7 @@ en el puerto 80 (acceso por IP).
 | Código de la app | `/var/www/app.doothemes` |
 | Docroot (web) | `/var/www/app.doothemes/public` |
 | Config de Caddy | `/etc/caddy/Caddyfile` |
-| Logs de Caddy | `/var/log/caddy/app.doothemes.log` |
+| Logs de Caddy | journald → `journalctl -u caddy` |
 | Respaldos de update | `/var/backups/app.doothemes-*.tar.gz` |
 | Servicios systemd | `php8.3-fpm`, `caddy`, `mariadb` |
 | Socket PHP-FPM | `/run/php/php8.3-fpm.sock` |

@@ -173,15 +173,11 @@ ${SITE_ADDR} {
 	request_body {
 		max_size 64MB
 	}
-
-	log {
-		output file /var/log/caddy/app.doothemes.log
-	}
 }
 CADDY
 } > "$CADDYFILE"
-
-mkdir -p /var/log/caddy && chown caddy:caddy /var/log/caddy
+# Nota: Caddy loguea a journald (stdout del servicio) → `journalctl -u caddy`.
+# Se evita un `log { output file … }` para no chocar con permisos del archivo.
 
 log "Validando el Caddyfile…"
 caddy validate --config "$CADDYFILE" --adapter caddyfile
