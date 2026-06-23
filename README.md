@@ -208,15 +208,19 @@ en el puerto 80 (acceso por IP).
 ### phpMyAdmin (opcional)
 
 ```bash
-sudo ./tools/phpmyadmin.sh
+sudo PMA_PATH=mirutadatabase ./tools/phpmyadmin.sh
 ```
 
-Instala phpMyAdmin en un **subdominio propio** (`db.<DOMAIN>` por defecto) con **HTTPS
-automático** y **Basic Auth** delante, y crea un usuario admin de MariaDB. Requiere un
-registro **DNS A** del subdominio apuntando a la IP del server (DNS only). El bloque de
-Caddy vive en `/etc/caddy/conf.d/phpmyadmin.caddy`, que el `Caddyfile` importa — así
-sobrevive a las re-ejecuciones de `install.sh`. Variables: `PMA_DOMAIN`, `PMA_BASIC_USER`,
-`PMA_DB_USER`. Imprime las credenciales (Basic Auth + MariaDB) una sola vez al final.
+Instala phpMyAdmin en una **ruta personalizada del dominio principal**
+(`https://<DOMAIN>/<PMA_PATH>`, default `/mirutadatabase`). Sin Basic Auth: la puerta es el
+**login de phpMyAdmin** (un usuario admin de MariaDB que crea el script). No requiere DNS
+extra (usa el dominio existente). El bloque de Caddy va en
+`/etc/caddy/conf.d/main/phpmyadmin.caddy`, que el bloque del sitio importa — así sobrevive a
+las re-ejecuciones de `install.sh` (requiere `install.sh` ≥ la versión que genera ese import).
+Variables: `PMA_PATH`, `PMA_DB_USER`. Imprime la contraseña de MariaDB una sola vez.
+
+> El Caddyfile separa el enrutamiento en bloques `handle`: los add-ons de subpath
+> (`conf.d/main/*.caddy`) se evalúan antes que la app, que captura el resto.
 
 ## Seguridad
 

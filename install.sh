@@ -194,32 +194,38 @@ log "Escribiendo ${CADDYFILE} (sitio: ${SITE_ADDR})…"
     fi
     cat <<CADDY
 ${SITE_ADDR} {
-	root * ${APP_DIR}/public
 	encode zstd gzip
-
-	# CI4: sirve el archivo si existe; si no, entra por index.php.
-	php_fastcgi unix/${PHP_FPM_SOCK}
-	file_server
-
-	# Negar acceso a archivos/carpetas ocultas (dotfiles), salvo el reto ACME.
-	# RE2 no soporta lookahead → se excluye .well-known con un matcher aparte.
-	@hidden {
-		path_regexp hiddenfiles /\.
-		not path /.well-known/*
-	}
-	respond @hidden 403
-
 	request_body {
 		max_size 64MB
 	}
+
+	# Add-ons montados como SUBPATH del dominio (ej. phpMyAdmin en /ruta).
+	# Cada uno define su propio handle/handle_path y va ANTES de la app.
+	import /etc/caddy/conf.d/main/*.caddy
+
+	# La app: captura todo lo que no haya tomado un add-on de arriba.
+	handle {
+		root * ${APP_DIR}/public
+
+		# CI4: sirve el archivo si existe; si no, entra por index.php.
+		php_fastcgi unix/${PHP_FPM_SOCK}
+		file_server
+
+		# Negar acceso a archivos/carpetas ocultas (dotfiles), salvo el reto ACME.
+		# RE2 no soporta lookahead → se excluye .well-known con un matcher aparte.
+		@hidden {
+			path_regexp hiddenfiles /\.
+			not path /.well-known/*
+		}
+		respond @hidden 403
+	}
 }
 
-# Add-ons (phpMyAdmin u otros): cada uno en /etc/caddy/conf.d/*.caddy, así
-# sobreviven a las re-ejecuciones del instalador.
+# Add-ons como SITIO aparte (subdominios): cada uno en /etc/caddy/conf.d/*.caddy.
 import /etc/caddy/conf.d/*.caddy
 CADDY
 } > "$CADDYFILE"
-mkdir -p /etc/caddy/conf.d
+mkdir -p /etc/caddy/conf.d /etc/caddy/conf.d/main
 # Nota: Caddy loguea a journald (stdout del servicio) → `journalctl -u caddy`.
 # Se evita un `log { output file … }` para no chocar con permisos del archivo.
 

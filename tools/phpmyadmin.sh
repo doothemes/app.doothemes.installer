@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # ============================================================================
-# tools/phpmyadmin.sh — Instala phpMyAdmin como add-on del despliegue.
+# tools/phpmyadmin.sh — Instala phpMyAdmin como add-on del despliegue, servido
+# en una RUTA personalizada del dominio principal (ej. /mirutadatabase).
 #
-# Lo sirve un subdominio propio en Caddy (HTTPS automático) con Basic Auth
-# delante, y crea un usuario admin de MariaDB para entrar. NO toca la app.
+# Sin Basic Auth: la puerta es el propio login de phpMyAdmin (usuario MariaDB).
+# La ruta es "secreta" (no enlazada) y configurable.
 #
-# El bloque de Caddy va en /etc/caddy/conf.d/ (lo importa el Caddyfile), así
-# sobrevive a las re-ejecuciones de install.sh.
+# El bloque de Caddy va en /etc/caddy/conf.d/main/ (lo importa el bloque del
+# sitio en el Caddyfile que genera install.sh), así sobrevive a re-ejecuciones.
 #
 # Variables (por entorno o installer.conf):
-#   PMA_DOMAIN      subdominio a servir (default: db.<DOMAIN>)
-#   PMA_BASIC_USER  usuario de Basic Auth (default: admin)
+#   PMA_PATH        ruta sin barra inicial (default: mirutadatabase)
 #   PMA_DB_USER     usuario admin de MariaDB a crear (default: dbadmin)
 #
-#   sudo ./tools/phpmyadmin.sh
+#   sudo PMA_PATH=mirutadatabase ./tools/phpmyadmin.sh
 # ============================================================================
 set -euo pipefail
 
@@ -32,23 +32,21 @@ require_ubuntu
 : "${PHP_VERSION:=8.3}"
 PHP_FPM_SOCK="/run/php/php${PHP_VERSION}-fpm.sock"
 
-PMA_DOMAIN="${PMA_DOMAIN:-${DOMAIN:+db.${DOMAIN}}}"
-BASIC_USER="${PMA_BASIC_USER:-admin}"
+PMA_PATH="${PMA_PATH:-mirutadatabase}"
+PMA_PATH="${PMA_PATH#/}"          # sin barra inicial
+PMA_PATH="${PMA_PATH%/}"          # sin barra final
 DBADMIN_USER="${PMA_DB_USER:-dbadmin}"
-PMA_DIR="/var/www/phpmyadmin"
+PMA_DIR="/var/www/${PMA_PATH}"    # la carpeta = la ruta (URL ↔ filesystem, sin reescritura)
 
-[ -n "$PMA_DOMAIN" ] || die "Define PMA_DOMAIN (o DOMAIN en installer.conf) para el subdominio."
+[ -n "$PMA_PATH" ] || die "PMA_PATH no puede estar vacío."
 
-# Credenciales generadas (se imprimen al final, una sola vez).
+# Credenciales del usuario admin de MariaDB (se imprimen al final).
 DBADMIN_PASS="$(gen_password)"
-BASIC_PASS="$(gen_password)"
 BLOWFISH="$(openssl rand -hex 16)"   # 32 chars, sin pipe (evita SIGPIPE)
 
 # ============================================================================
 step "1/4 · Descargando phpMyAdmin"
 # ============================================================================
-command -v unzip >/dev/null 2>&1 || apt-get install -y -qq unzip >/dev/null 2>&1 || true
-
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 log "Bajando el último phpMyAdmin (all-languages)…"
@@ -61,6 +59,10 @@ SRC=""
 for d in "$TMP"/phpMyAdmin-*-all-languages/; do [ -d "$d" ] && SRC="${d%/}" && break; done
 [ -n "$SRC" ] || die "No se halló la carpeta de phpMyAdmin extraída."
 
+# Limpia un eventual setup viejo por subdominio (migración a subpath).
+rm -f /etc/caddy/conf.d/phpmyadmin.caddy
+[ -d /var/www/phpmyadmin ] && [ "$PMA_DIR" != /var/www/phpmyadmin ] && rm -rf /var/www/phpmyadmin
+
 log "Desplegando en ${PMA_DIR}…"
 rm -rf "$PMA_DIR"
 mkdir -p "$PMA_DIR"
@@ -71,10 +73,14 @@ ok "phpMyAdmin desplegado."
 step "2/4 · Configuración"
 # ============================================================================
 log "Escribiendo config.inc.php…"
+# PmaAbsoluteUri fija la URL base (la ruta NO se reescribe, así que coincide).
+ABS_URI=""
+[ -n "$DOMAIN" ] && ABS_URI="\$cfg['PmaAbsoluteUri'] = 'https://${DOMAIN}/${PMA_PATH}/';"
 cat > "${PMA_DIR}/config.inc.php" <<PHPCONF
 <?php
 // Generado por tools/phpmyadmin.sh — no editar a mano.
 \$cfg['blowfish_secret'] = '${BLOWFISH}';
+${ABS_URI}
 \$i = 0;
 \$i++;
 \$cfg['Servers'][\$i]['auth_type']       = 'cookie';
@@ -91,7 +97,6 @@ find "$PMA_DIR" -type f -exec chmod 644 {} +
 mkdir -p "${PMA_DIR}/tmp"
 chown "${APP_USER}:${APP_USER}" "${PMA_DIR}/tmp"
 chmod 770 "${PMA_DIR}/tmp"
-# El config lleva el blowfish_secret: legible solo por root y el usuario de PHP.
 chown "root:${APP_USER}" "${PMA_DIR}/config.inc.php"
 chmod 640 "${PMA_DIR}/config.inc.php"
 ok "Configuración aplicada."
@@ -109,39 +114,24 @@ SQL
 ok "Usuario admin de MariaDB listo."
 
 # ============================================================================
-step "4/4 · Caddy (subdominio + Basic Auth + HTTPS)"
+step "4/4 · Caddy (subpath del dominio principal)"
 # ============================================================================
-mkdir -p /etc/caddy/conf.d
+mkdir -p /etc/caddy/conf.d/main
 
-# Hash bcrypt para el Basic Auth (lo genera el propio Caddy).
-BASIC_HASH="$(caddy hash-password --plaintext "$BASIC_PASS")"
-
-log "Escribiendo /etc/caddy/conf.d/phpmyadmin.caddy (sitio: ${PMA_DOMAIN})…"
-cat > /etc/caddy/conf.d/phpmyadmin.caddy <<CADDYPMA
-${PMA_DOMAIN} {
-	root * ${PMA_DIR}
-	encode zstd gzip
-
-	# Capa extra: usuario/clave HTTP antes de ver phpMyAdmin.
-	basic_auth {
-		${BASIC_USER} ${BASIC_HASH}
-	}
-
+# El handle NO quita el prefijo: la URL /${PMA_PATH}/… mapea a /var/www/${PMA_PATH}/…
+log "Escribiendo /etc/caddy/conf.d/main/phpmyadmin.caddy (ruta: /${PMA_PATH})…"
+cat > /etc/caddy/conf.d/main/phpmyadmin.caddy <<CADDYPMA
+# phpMyAdmin en https://${DOMAIN:-este-host}/${PMA_PATH}  (add-on; lo gestiona tools/phpmyadmin.sh)
+handle /${PMA_PATH}* {
+	root * /var/www
 	php_fastcgi unix/${PHP_FPM_SOCK}
 	file_server
-
-	@hidden {
-		path_regexp hiddenfiles /\.
-		not path /.well-known/*
-	}
-	respond @hidden 403
 }
 CADDYPMA
 
-# Asegura que el Caddyfile principal importe los add-ons de conf.d.
-if ! grep -q 'import /etc/caddy/conf.d' /etc/caddy/Caddyfile 2>/dev/null; then
-    log "Agregando 'import /etc/caddy/conf.d/*.caddy' al Caddyfile principal…"
-    printf '\nimport /etc/caddy/conf.d/*.caddy\n' >> /etc/caddy/Caddyfile
+# El bloque del sitio (generado por install.sh) debe importar conf.d/main.
+if ! grep -q 'conf.d/main' /etc/caddy/Caddyfile 2>/dev/null; then
+    warn "El Caddyfile no importa conf.d/main. Re-ejecuta install.sh (versión nueva) para que tome la ruta."
 fi
 
 log "Validando y recargando Caddy…"
@@ -154,18 +144,13 @@ cat <<SUMMARY
 
 ${C_BOLD}${C_GREEN}phpMyAdmin instalado.${C_RESET}
 
-  URL          : ${C_BLUE}https://${PMA_DOMAIN}${C_RESET}
-  (Requiere un registro DNS A: ${PMA_DOMAIN%%.*} → la IP del server, DNS only.
-   El certificado se emite cuando el DNS propague.)
+  URL          : ${C_BLUE}https://${DOMAIN:-TU-DOMINIO}/${PMA_PATH}${C_RESET}
+  (ruta secreta, sin Basic Auth; la puerta es el login de phpMyAdmin)
 
-  ${C_BOLD}Basic Auth${C_RESET} (primera puerta, HTTP):
-    Usuario    : ${BASIC_USER}
-    Contraseña : ${BASIC_PASS}
-
-  ${C_BOLD}Login de MariaDB${C_RESET} (dentro de phpMyAdmin):
+  ${C_BOLD}Login de MariaDB${C_RESET}:
     Usuario    : ${DBADMIN_USER}
     Contraseña : ${DBADMIN_PASS}
     (privilegios totales sobre todas las bases)
 
-  ${C_YELLOW}Guarda estas credenciales: no se vuelven a mostrar.${C_RESET}
+  ${C_YELLOW}Guarda la contraseña: no se vuelve a mostrar.${C_RESET}
 SUMMARY
