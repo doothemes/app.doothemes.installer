@@ -179,6 +179,16 @@ CADDY
 # Nota: Caddy loguea a journald (stdout del servicio) → `journalctl -u caddy`.
 # Se evita un `log { output file … }` para no chocar con permisos del archivo.
 
+# Si ufw está activo, abrir los puertos web. Sin esto, el sitio es inalcanzable
+# y —peor— el reto ACME de Let's Encrypt no llega a Caddy y el cert nunca se emite.
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+    log "ufw activo: abriendo puertos 80 y 443…"
+    ufw allow 80/tcp  >/dev/null 2>&1 || true
+    ufw allow 443/tcp >/dev/null 2>&1 || true
+    ufw reload        >/dev/null 2>&1 || true
+    ok "Puertos 80/443 abiertos en ufw."
+fi
+
 log "Validando el Caddyfile…"
 caddy validate --config "$CADDYFILE" --adapter caddyfile
 systemctl reload caddy || systemctl restart caddy

@@ -61,7 +61,8 @@ su llave GPG antes de instalar.
 
 Esto queda **fuera de alcance** del instalador; configúralo según tu entorno:
 
-- **Firewall**: abre solo 80/443 (y 22 con acceso restringido). El instalador no toca `ufw`.
+- **Firewall**: el instalador abre **80/443** en `ufw` si está activo (los necesita el
+  sitio y el reto ACME). Restringir el acceso a **22/SSH** y cualquier otra regla queda a tu cargo.
 - **SSH**: deshabilita login por contraseña / root; usa llaves.
 - **MariaDB**: queda escuchando solo en `localhost` (default), sin acceso remoto.
 - **Actualizaciones del SO**: habilita `unattended-upgrades` aparte.

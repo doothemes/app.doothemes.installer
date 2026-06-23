@@ -179,7 +179,7 @@ en el puerto 80 (acceso por IP).
 | Síntoma | Causa probable / arreglo |
 |---|---|
 | `No se pudo descargar el release` | Token sin permiso de Contents, repo mal escrito, o no hay releases publicados. Verifica con `curl -H "Authorization: Bearer <token>" https://api.github.com/repos/<repo>/releases/latest`. |
-| Caddy no emite el certificado | DNS no apunta aún a la IP, o el puerto 80/443 está cerrado. Revisa `journalctl -u caddy -e`. |
+| Caddy no emite el certificado (`challenge failed`) | (a) DNS no apunta a la IP del servidor; (b) **firewall** bloquea 80/443 — el instalador abre `ufw`, pero si usas otro firewall (o el del proveedor) ábrelos a mano; (c) registro **solo AAAA/IPv6** con IPv6 no alcanzable → usa un registro **A** a la IPv4. Diagnostica con `journalctl -u caddy -e`. |
 | Error 502 Bad Gateway | PHP-FPM caído o el usuario `caddy` no accede al socket. `sudo ./restart.sh` y confirma que `caddy` está en el grupo `www-data`. |
 | El wizard `/install` no carga | Permisos de `writable/`. Reaplica con: `sudo chown -R www-data:www-data /var/www/app.doothemes && sudo chmod -R 775 /var/www/app.doothemes/writable`. |
 | `update.sh` se niega | Existe `/var/www/app.doothemes/.git` (deploy por git). Usa `git checkout <tag>`. |
