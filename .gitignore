@@ -1,0 +1,16 @@
+# ============================================================================
+# NUNCA versionar: contiene el token de GitHub y la contraseña de BD reales.
+# Solo se versiona installer.conf.example (plantilla con valores vacíos).
+# ============================================================================
+installer.conf
+
+# Variantes por entorno, por si las usas
+installer.conf.*
+!installer.conf.example
+
+# Respaldos / temporales que pudieran quedar al probar local
+*.zip
+*.tar.gz
+*.log
+*.bak
+err.txt

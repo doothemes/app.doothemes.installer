@@ -1,0 +1,46 @@
+# ============================================================================
+# app.doothemes.installer — configuración
+# Copia este archivo a `installer.conf` y ajusta los valores.
+#   cp installer.conf.example installer.conf
+# Los scripts lo cargan automáticamente. Lo que dejes vacío se pregunta o se
+# autogenera en tiempo de ejecución.
+# ============================================================================
+
+# --- Dominio y HTTPS --------------------------------------------------------
+# Dominio público que servirá la app (debe apuntar por DNS a este servidor
+# ANTES de instalar, para que Caddy emita el certificado). Si lo dejas vacío,
+# se sirve solo por HTTP en el puerto 80 (acceso por IP, sin HTTPS).
+#
+# HTTPS es AUTOMÁTICO: con un DOMAIN válido, Caddy obtiene y RENUEVA solo el
+# certificado Let's Encrypt. No hay certbot ni paso de SSL aparte.
+DOMAIN=""
+
+# Email para los avisos de ACME/Let's Encrypt (recomendado si hay DOMAIN).
+LETSENCRYPT_EMAIL=""
+
+# --- Aplicación -------------------------------------------------------------
+# Dónde se despliega el código. El docroot real es $APP_DIR/public.
+APP_DIR="/var/www/app.doothemes"
+
+# Usuario del sistema dueño de los archivos y bajo el que corre PHP-FPM.
+APP_USER="www-data"
+
+# Versión de PHP a instalar (la app exige >= 8.2). Se instala vía PPA ondrej/php
+# para garantizar disponibilidad en cualquier release de Ubuntu.
+PHP_VERSION="8.3"
+
+# --- Release privado (GitHub) ----------------------------------------------
+# Repositorio owner/repo de donde se baja el último release.
+GITHUB_REPO="doothemes/app.doothemes"
+
+# Personal Access Token con permiso de lectura de Contents sobre el repo.
+# Déjalo vacío para que el instalador lo pida de forma interactiva (no se
+# guarda en disco si se ingresa así).
+GITHUB_TOKEN=""
+
+# --- Base de datos (MariaDB local) -----------------------------------------
+# Si DB_PASS queda vacío, se autogenera una contraseña fuerte y se imprime al
+# final para que la pegues en el wizard web /install.
+DB_NAME="doothemes"
+DB_USER="doothemes"
+DB_PASS=""
