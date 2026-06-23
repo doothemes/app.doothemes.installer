@@ -83,8 +83,11 @@ prompt_if_empty() {
 }
 
 # Genera una contraseña fuerte (alfanumérica, 28 chars).
+# Subshell con `set +o pipefail`: `head` cierra el pipe y `tr` recibe SIGPIPE
+# (exit 141); bajo `set -o pipefail` + `set -e` del llamador eso abortaría el
+# script entero. Aislarlo aquí evita esa muerte silenciosa.
 gen_password() {
-    tr -dc 'A-Za-z0-9' </dev/urandom | head -c 28
+    ( set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 28 )
 }
 
 # --- Releases ---------------------------------------------------------------
@@ -114,11 +117,15 @@ download_latest_release() {
 
 # Extrae el zip y devuelve (por stdout) la ruta de la carpeta raíz extraída.
 # El zipball de GitHub envuelve todo en `owner-repo-<sha>/`.
+# Se usa un glob (no `find … | head`) para no disparar SIGPIPE bajo pipefail.
 extract_release() {
-    local zip="$1" dest="$2"
+    local zip="$1" dest="$2" d
     mkdir -p "$dest"
     unzip -q "$zip" -d "$dest" || { err "Falló unzip del release."; return 1; }
-    find "$dest" -mindepth 1 -maxdepth 1 -type d | head -n1
+    for d in "$dest"/*/; do
+        [ -d "$d" ] && { printf '%s' "${d%/}"; return 0; }
+    done
+    return 1
 }
 
 # --- Permisos ---------------------------------------------------------------
