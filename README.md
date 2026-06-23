@@ -98,7 +98,8 @@ acepta variables por entorno: `DOMAIN=x GITHUB_TOKEN=y sudo -E ./install.sh`.
 2. **Base de datos** — crea la BD `doothemes` (utf8mb4) y un usuario local con contraseña
    autogenerada.
 3. **Release** — consulta el último release del repo privado, descarga el zipball con el
-   token, lo extrae en `/var/www/app.doothemes` y corre `composer install --no-dev`.
+   token, lo extrae en `/var/www/app.doothemes`, corre `composer install --no-dev` e instala
+   el **cron del scheduler** (`/etc/cron.d/doothemes`: `spark tasks:run` cada minuto).
 4. **Web + HTTPS** — escribe `/etc/caddy/Caddyfile` (docroot = `public/`), valida y recarga.
    Con dominio, Caddy emite y renueva el certificado solo.
 
@@ -169,7 +170,8 @@ en el puerto 80 (acceso por IP).
 | Config de Caddy | `/etc/caddy/Caddyfile` |
 | Logs de Caddy | journald → `journalctl -u caddy` |
 | Respaldos de update | `/var/backups/app.doothemes-*.tar.gz` |
-| Servicios systemd | `php8.3-fpm`, `caddy`, `mariadb` |
+| Cron del scheduler | `/etc/cron.d/doothemes` (corre `spark tasks:run` cada minuto) |
+| Servicios systemd | `php8.3-fpm`, `caddy`, `mariadb`, `cron` |
 | Socket PHP-FPM | `/run/php/php8.3-fpm.sock` |
 
 ---

@@ -137,6 +137,22 @@ log "Instalando dependencias PHP (composer, sin dev)…"
 
 fix_permissions "$APP_DIR" "$APP_USER"
 
+# --- Cron del scheduler -----------------------------------------------------
+# La app usa un scheduler central: UNA línea de cron cada minuto dispara
+# `spark tasks:run`, que evalúa el registro (Config\Tasks) y corre lo vencido.
+# Se instala en /etc/cron.d con nombre SIN punto (cron ignora los que tienen '.').
+log "Configurando el cron del scheduler (tasks:run cada minuto)…"
+PHP_BIN="$(command -v "php${PHP_VERSION}" || command -v php || echo /usr/bin/php)"
+cat > /etc/cron.d/doothemes <<CRON
+# app.doothemes — scheduler central (lo regenera el instalador; no editar a mano).
+# Cada minuto evalúa las tareas programadas y ejecuta las vencidas.
+MAILTO=""
+* * * * * ${APP_USER} cd ${APP_DIR} && ${PHP_BIN} spark tasks:run >> /dev/null 2>&1
+CRON
+chmod 644 /etc/cron.d/doothemes
+systemctl enable --now cron >/dev/null 2>&1 || true
+ok "Cron instalado (/etc/cron.d/doothemes, usuario ${APP_USER})."
+
 # ============================================================================
 step "4/4 · Servidor web + HTTPS (Caddy)"
 # ============================================================================
