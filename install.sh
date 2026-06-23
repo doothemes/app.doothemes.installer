@@ -161,8 +161,8 @@ log "Instalando dependencias PHP (composer, sin dev)…"
 fix_permissions "$APP_DIR" "$APP_USER"
 
 # --- Cron del scheduler -----------------------------------------------------
-# La app usa un scheduler central: UNA línea de cron cada minuto dispara
-# `spark tasks:run`, que evalúa el registro (Config\Tasks) y corre lo vencido.
+# La app usa un scheduler central: UNA línea de cron cada minuto dispara el
+# runner de tareas de la app, que evalúa su registro y corre lo vencido.
 # Se instala en /etc/cron.d con nombre SIN punto (cron ignora los que tienen '.').
 log "Configurando el cron del scheduler (tasks:run cada minuto)…"
 PHP_BIN="$(command -v "php${PHP_VERSION}" || command -v php || echo /usr/bin/php)"
@@ -207,7 +207,7 @@ ${SITE_ADDR} {
 	handle {
 		root * ${APP_DIR}/public
 
-		# CI4: sirve el archivo si existe; si no, entra por index.php.
+		# Sirve el archivo si existe; si no, entra por el front controller.
 		php_fastcgi unix/${PHP_FPM_SOCK}
 		file_server
 

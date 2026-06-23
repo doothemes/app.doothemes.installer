@@ -130,7 +130,7 @@ extract_release() {
 
 # --- Permisos ---------------------------------------------------------------
 
-# Aplica el esquema de permisos estándar de CI4 sobre $APP_DIR.
+# Aplica el esquema de permisos estándar de la app sobre $APP_DIR.
 fix_permissions() {
     local dir="$1" user="$2"
     log "Ajustando permisos en $dir (dueño: $user)…"

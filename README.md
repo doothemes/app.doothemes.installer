@@ -1,11 +1,11 @@
 # app.doothemes.installer
 
-Instalador y herramientas de operación para desplegar **app.doothemes** (CodeIgniter 4 /
-**PHP 8.3**) en un servidor **Ubuntu** desde cero, con **HTTPS automático**.
+Instalador y herramientas de operación para desplegar **app.doothemes** (aplicación **PHP
+8.3**) en un servidor **Ubuntu** desde cero, con **HTTPS automático**.
 
 Este repo es **público** y contiene solo fontanería de despliegue: **no incluye el código
 del sistema**. El release se descarga en tiempo de ejecución desde el repositorio **privado**
-con un token que aporta el operador (el mismo mecanismo de zipball que usa el `UpdateService`
+con un token que aporta el operador (el mismo mecanismo de zipball que usa el actualizador
 interno de la app). Ver [SECURITY.md](SECURITY.md).
 
 ---
@@ -28,7 +28,7 @@ interno de la app). Ver [SECURITY.md](SECURITY.md).
 ┌──────────────────────── Servidor Ubuntu ────────────────────────┐
 │                                                                  │
 │   Internet ──443/80──►  Caddy  ──► PHP-FPM 8.3 ──► app.doothemes │
-│                          │ TLS automático          (CI4)         │
+│                          │ TLS automático        (app PHP)       │
 │                          │ (Let's Encrypt)           │           │
 │                          └─ docroot: /var/www/app.doothemes/public│
 │                                                       │          │
@@ -58,8 +58,9 @@ interno de la app). Ver [SECURITY.md](SECURITY.md).
 
 - **Ubuntu** 22.04 o 24.04 (probado), con acceso `root`/`sudo`.
 - **Puertos 80 y 443** abiertos hacia el servidor (Caddy los necesita para emitir el cert).
-- Para HTTPS: un **dominio** con un registro **DNS A/AAAA** apuntando a la IP del servidor
-  **antes** de instalar.
+- Para HTTPS: un **dominio** con un registro **DNS A** apuntando a la IP del servidor
+  **antes** de instalar. Si usas **Cloudflare**, déjalo en **DNS only** (nube gris) — ver
+  [Ajuste de DNS (Cloudflare)](#ajuste-de-dns-cloudflare).
 - Un **GitHub token** con **Contents: Read** sobre el repo de releases. Recomendado:
   *fine-grained*, acotado a ese único repo (ver [SECURITY.md](SECURITY.md)).
 - PHP **8.3** se instala automáticamente vía PPA `ondrej/php` (la app exige ≥ 8.2; 8.3 es la
@@ -99,7 +100,7 @@ acepta variables por entorno: `DOMAIN=x GITHUB_TOKEN=y sudo -E ./install.sh`.
    autogenerada.
 3. **Release** — consulta el último release del repo privado, descarga el zipball con el
    token, lo extrae en `/var/www/app.doothemes`, corre `composer install --no-dev` e instala
-   el **cron del scheduler** (`/etc/cron.d/doothemes`: `spark tasks:run` cada minuto).
+   el **cron del scheduler** de la app (`/etc/cron.d/doothemes`, cada minuto).
 4. **Web + HTTPS** — escribe `/etc/caddy/Caddyfile` (docroot = `public/`), valida y recarga.
    Con dominio, Caddy emite y renueva el certificado solo.
 
@@ -121,7 +122,7 @@ Baja el último release y lo copia **sobre** la instalación **preservando** `.e
 1. **Respaldo** del código actual en `/var/backups/app.doothemes-<fecha>.tar.gz` (sin `vendor/`).
 2. **Overlay** del release (rsync con exclusiones).
 3. `composer install --no-dev`.
-4. `php spark migrate` (aplica migraciones nuevas del release).
+4. Aplica las **migraciones** nuevas que traiga el release.
 5. **Reload** de PHP-FPM y Caddy (sin cortar conexiones).
 
 Si la raíz tiene un `.git` (deploy por git), `update.sh` **se niega**: ahí la vía correcta es
@@ -159,6 +160,34 @@ con Let's Encrypt) cuando `DOMAIN` está definido. Si cambias de dominio, edita
 `/etc/caddy/Caddyfile` y `sudo ./restart.sh reload`. Sin dominio, el sitio se sirve por HTTP
 en el puerto 80 (acceso por IP).
 
+### Ajuste de DNS (Cloudflare)
+
+Para emitir el certificado, Let's Encrypt debe alcanzar el servidor **directamente** en los
+puertos 80/443. Si el dominio está detrás del **proxy de Cloudflare** (nube **naranja**), el
+reto ACME llega a Cloudflare —no a tu servidor— y el certificado **nunca se emite**
+(`challenge failed`). La configuración correcta:
+
+1. **Cloudflare → tu dominio → DNS → Records.**
+2. Crea o edita el registro del host:
+   - **Type:** `A`
+   - **Name:** `@` (raíz) o el subdominio (ej. `app`).
+   - **IPv4 address:** la IP pública del servidor.
+   - **Proxy status:** **DNS only** (nube **gris**, no naranja). ← lo más importante.
+3. Guarda (propaga en segundos/minutos).
+4. (Re)ejecuta `sudo ./install.sh` o `sudo ./restart.sh reload`; Caddy reintenta y emite el cert.
+
+**Notas:**
+
+- Usa un registro **A (IPv4)**. Evita dejar **solo un AAAA (IPv6)** si el IPv6 del servidor
+  no es alcanzable: Let's Encrypt prioriza IPv6 y, si falla, el reto no se completa. Borra el
+  AAAA o apúntalo a un IPv6 que responda.
+- Verifica a dónde resuelve **desde el servidor**: `getent hosts TU-DOMINIO` debe devolver la
+  **IP del servidor**, no IPs de Cloudflare (`104.x` / `172.6x` / `2606:4700:…`).
+- Comprueba la emisión con `journalctl -u caddy -e` (busca `certificate obtained successfully`).
+- **¿Necesitas mantener el proxy de Cloudflare?** Entonces no uses ACME por HTTP. Opciones
+  (fuera de este instalador): **Origin Certificate** de Cloudflare en Caddy con SSL
+  *Full (strict)*, o el reto **DNS-01** con el plugin `caddy-dns/cloudflare` y un API token.
+
 ---
 
 ## Rutas y servicios en el servidor
@@ -170,7 +199,7 @@ en el puerto 80 (acceso por IP).
 | Config de Caddy | `/etc/caddy/Caddyfile` |
 | Logs de Caddy | journald → `journalctl -u caddy` |
 | Respaldos de update | `/var/backups/app.doothemes-*.tar.gz` |
-| Cron del scheduler | `/etc/cron.d/doothemes` (corre `spark tasks:run` cada minuto) |
+| Cron del scheduler | `/etc/cron.d/doothemes` (runner de tareas de la app, cada minuto) |
 | Servicios systemd | `php8.3-fpm`, `caddy`, `mariadb`, `cron` |
 | Socket PHP-FPM | `/run/php/php8.3-fpm.sock` |
 

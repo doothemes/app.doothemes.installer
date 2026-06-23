@@ -79,7 +79,7 @@ fix_permissions "$APP_DIR" "$APP_USER"
 # migraciones nuevas. Como son hacia adelante, antes se respalda la BD.
 if [ -f "${APP_DIR}/.env" ]; then
     step "Respaldo de base de datos"
-    # Nombre real de la BD desde el .env (CI4); fallback al de installer.conf.
+    # Nombre real de la BD desde el .env de la app; fallback al de installer.conf.
     DBN="$(grep -E '^database\.default\.database' "${APP_DIR}/.env" 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' "')"
     DBN="${DBN:-$DB_NAME}"
     BACKUP_DB="/var/backups/doothemes-db-${STAMP}.sql.gz"
@@ -93,7 +93,7 @@ if [ -f "${APP_DIR}/.env" ]; then
     fi
 
     step "Migraciones"
-    log "Ejecutando php spark migrate…"
+    log "Aplicando migraciones…"
     ( cd "$APP_DIR" && sudo -u "$APP_USER" -H php spark migrate --all ) \
         || warn "Migraciones fallaron. Restaura la BD con: gunzip -c ${BACKUP_DB} | mysql ${DBN}"
 else
