@@ -74,17 +74,36 @@ log "Actualizando dependencias PHP…"
 
 fix_permissions "$APP_DIR" "$APP_USER"
 
-# --- Migraciones ------------------------------------------------------------
+# --- Respaldo de BD + Migraciones -------------------------------------------
 # Solo si la app ya está instalada (.env presente); un release puede traer
-# migraciones nuevas que hay que aplicar al esquema existente.
+# migraciones nuevas. Como son hacia adelante, antes se respalda la BD.
 if [ -f "${APP_DIR}/.env" ]; then
+    step "Respaldo de base de datos"
+    # Nombre real de la BD desde el .env (CI4); fallback al de installer.conf.
+    DBN="$(grep -E '^database\.default\.database' "${APP_DIR}/.env" 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' "')"
+    DBN="${DBN:-$DB_NAME}"
+    BACKUP_DB="/var/backups/doothemes-db-${STAMP}.sql.gz"
+    log "Volcando la BD '${DBN}' a ${BACKUP_DB}…"
+    # root usa auth por socket → mysqldump sin contraseña.
+    if mysqldump --single-transaction --quick "$DBN" 2>/dev/null | gzip > "$BACKUP_DB"; then
+        ok "Respaldo de BD creado."
+    else
+        rm -f "$BACKUP_DB"
+        warn "No se pudo respaldar la BD; continúo bajo tu criterio."
+    fi
+
     step "Migraciones"
     log "Ejecutando php spark migrate…"
     ( cd "$APP_DIR" && sudo -u "$APP_USER" -H php spark migrate --all ) \
-        || warn "Las migraciones fallaron; revisa manualmente (php spark migrate)."
+        || warn "Migraciones fallaron. Restaura la BD con: gunzip -c ${BACKUP_DB} | mysql ${DBN}"
 else
     warn "Sin .env: la app aún no está instalada (no se migra). Abre /install."
 fi
+
+# Prune: conserva los 10 respaldos más recientes (código y BD) para no llenar disco.
+for pat in 'app.doothemes-*.tar.gz' 'doothemes-db-*.sql.gz'; do
+    ls -1t /var/backups/$pat 2>/dev/null | tail -n +11 | xargs -r rm -f || true
+done
 
 # --- Reinicio ---------------------------------------------------------------
 step "Reiniciando servicios"

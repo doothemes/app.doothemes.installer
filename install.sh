@@ -35,8 +35,17 @@ else
     prompt_if_empty LETSENCRYPT_EMAIL "Email para Let's Encrypt (HTTPS)"
 fi
 
-# Autogenera la contraseña de BD si no se fijó.
-if [ -z "${DB_PASS:-}" ]; then
+# ¿La app ya está instalada? El wizard web deja .env + writable/installed.lock.
+# Si es así, re-correr install.sh NO debe tocar la BD ni su contraseña (rompería
+# el .env existente): solo re-despliega código y reconfigura servicios.
+INSTALLED=no
+if [ -f "${APP_DIR}/.env" ] || [ -f "${APP_DIR}/writable/installed.lock" ]; then
+    INSTALLED=yes
+    warn "Instalación existente detectada (.env/installed.lock): se conservan la BD y el .env."
+fi
+
+# Autogenera la contraseña de BD si no se fijó (solo en instalación nueva).
+if [ "$INSTALLED" != yes ] && [ -z "${DB_PASS:-}" ]; then
     DB_PASS="$(gen_password)"
     DB_PASS_GENERATED="yes"
 fi
@@ -91,21 +100,35 @@ fi
 usermod -aG "$APP_USER" caddy 2>/dev/null || true
 
 systemctl enable --now "${PHP_FPM_SVC}" mariadb caddy >/dev/null 2>&1 || true
-ok "Dependencias instaladas (PHP $(php -r 'echo PHP_VERSION;'))."
+
+# Límites de PHP-FPM: la app sube media (imágenes de producto) y Caddy ya acepta
+# 64MB de body; alineamos PHP para que no corte antes (defaults son 2M/8M).
+log "Ajustando límites de PHP (subida de media)…"
+cat > "/etc/php/${PHP_VERSION}/fpm/conf.d/99-doothemes.ini" <<PHPINI
+upload_max_filesize = 64M
+post_max_size = 64M
+memory_limit = 256M
+PHPINI
+systemctl restart "${PHP_FPM_SVC}" 2>/dev/null || true
+ok "Dependencias instaladas (PHP $(php -r 'echo PHP_VERSION;'); upload/post 64M)."
 
 # ============================================================================
 step "2/4 · Base de datos (MariaDB)"
 # ============================================================================
 # MariaDB recién instalada usa auth por socket para root → `mysql` como root SO.
-log "Creando base de datos '${DB_NAME}' y usuario '${DB_USER}'…"
-mysql <<SQL
+if [ "$INSTALLED" = yes ]; then
+    log "App ya instalada: no se crea ni modifica la BD (se conserva la existente)."
+else
+    log "Creando base de datos '${DB_NAME}' y usuario '${DB_USER}'…"
+    mysql <<SQL
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
 ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASS}';
 GRANT ALL PRIVILEGES ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
 FLUSH PRIVILEGES;
 SQL
-ok "Base de datos lista."
+    ok "Base de datos lista."
+fi
 
 # ============================================================================
 step "3/4 · Descarga y despliegue del release"
@@ -220,6 +243,22 @@ else
     BASE_URL="http://$(hostname -I | awk '{print $1}')"
 fi
 
+if [ "$INSTALLED" = yes ]; then
+cat <<SUMMARY
+
+${C_BOLD}${C_GREEN}Re-despliegue completado.${C_RESET}  (la app ya estaba instalada)
+
+  Release desplegado : ${RELEASE_TAG:-?}
+  Directorio         : ${APP_DIR}
+  Web / HTTPS        : Caddy ${DOMAIN:+(TLS automático para ${DOMAIN})}
+
+  Se conservaron el .env, la base de datos y las migraciones existentes; no se
+  tocó ninguna credencial. Para aplicar un release nuevo con sus migraciones,
+  usa ${C_BLUE}sudo ./update.sh${C_RESET} (respalda BD/código y corre migrate).
+
+  Sitio: ${C_BLUE}${BASE_URL}${C_RESET}
+SUMMARY
+else
 cat <<SUMMARY
 
 ${C_BOLD}${C_GREEN}Instalación completada.${C_RESET}
@@ -244,3 +283,4 @@ ${C_BOLD}${C_GREEN}Instalación completada.${C_RESET}
     Actualizar  : sudo ./update.sh
     Reiniciar   : sudo ./restart.sh
 SUMMARY
+fi
