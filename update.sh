@@ -65,9 +65,12 @@ rsync -a \
 ok "Archivos aplicados."
 
 log "Actualizando dependencias PHP…"
-( cd "$APP_DIR" && sudo -u "$APP_USER" -H \
-    composer install --no-dev --optimize-autoloader --no-interaction --quiet ) \
-    || die "Falló composer install."
+# Como root (el overlay dejó archivos de root) con HOME de caché escribible;
+# fix_permissions luego deja todo, incluido vendor/, como $APP_USER.
+( cd "$APP_DIR" \
+    && COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_HOME=/tmp/composer-doothemes \
+       composer install --no-dev --optimize-autoloader --no-interaction --no-progress ) \
+    || die "Falló composer install (revisa el detalle de composer arriba)."
 
 fix_permissions "$APP_DIR" "$APP_USER"
 

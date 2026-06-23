@@ -128,9 +128,12 @@ rsync -a "$SRC_DIR"/ "$APP_DIR"/
 ok "Código desplegado."
 
 log "Instalando dependencias PHP (composer, sin dev)…"
-( cd "$APP_DIR" && sudo -u "$APP_USER" -H \
-    composer install --no-dev --optimize-autoloader --no-interaction --quiet ) \
-    || die "Falló composer install en $APP_DIR."
+# Se corre como root (los archivos recién copiados son de root) con un HOME
+# escribible para la caché; luego fix_permissions deja vendor/ como $APP_USER.
+( cd "$APP_DIR" \
+    && COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_HOME=/tmp/composer-doothemes \
+       composer install --no-dev --optimize-autoloader --no-interaction --no-progress ) \
+    || die "Falló composer install en $APP_DIR (revisa el detalle de composer arriba)."
 
 fix_permissions "$APP_DIR" "$APP_USER"
 
