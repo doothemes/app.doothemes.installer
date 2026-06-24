@@ -112,6 +112,19 @@ PHPINI
 systemctl restart "${PHP_FPM_SVC}" 2>/dev/null || true
 ok "Dependencias instaladas (PHP $(php -r 'echo PHP_VERSION;'); upload/post 64M)."
 
+# Preflight de respaldos: el módulo de backups usa ZipArchive (extensión 'zip',
+# requerida) y, para cifrar, libzip con AES-256. La instala php${PHP_VERSION}-zip;
+# se verifica y se avisa si el host no puede cifrar (el backup saldría sin cifrar).
+if php -r 'exit(class_exists("ZipArchive") ? 0 : 1);' 2>/dev/null; then
+    if php -r 'exit(defined("ZipArchive::EM_AES_256") ? 0 : 1);' 2>/dev/null; then
+        ok "Respaldos: ZipArchive + AES-256 disponibles (backups cifrados)."
+    else
+        warn "Respaldos: ZipArchive OK pero libzip SIN AES-256 → los backups se crearían SIN cifrar."
+    fi
+else
+    warn "Respaldos: falta la extensión PHP 'zip' (ZipArchive) → el módulo de backups fallará. Revisa php${PHP_VERSION}-zip."
+fi
+
 # ============================================================================
 step "2/4 · Base de datos (MariaDB)"
 # ============================================================================
